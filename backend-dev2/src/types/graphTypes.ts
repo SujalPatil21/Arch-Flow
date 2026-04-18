@@ -2,6 +2,10 @@ export type FileInput = {
   id: string;
   content: string;
   extension: string;
+  techStack?: string[];
+  isConfig?: boolean;
+  totalDeps?: number;
+  framework?: string;
 };
 
 export type DependencyInput = {
@@ -26,6 +30,10 @@ export type GraphNode = {
   type: 'file' | 'folder';
   position: { x: number; y: number };
   highlight: boolean;
+  techStack?: string[];
+  framework?: string;
+  isConfig?: boolean;
+  totalDeps?: number;
 };
 
 export type GraphEdge = {

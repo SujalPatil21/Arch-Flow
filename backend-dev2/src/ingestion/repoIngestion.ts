@@ -25,13 +25,13 @@ function getGitHubHeaders() {
   const token = process.env.GITHUB_TOKEN;
   if (token) {
     return {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json"
+      "Authorization": `Bearer ${token}`,
+      "Accept": "application/vnd.github+json"
     };
   }
-  console.warn("⚠️ No GitHub token found — using unauthenticated requests (Rate limits will be strict)");
+  console.warn("⚠️ No GitHub token found — using unauthenticated requests (Strict rate limits apply)");
   return {
-    Accept: "application/vnd.github+json"
+    "Accept": "application/vnd.github+json"
   };
 }
 
@@ -59,8 +59,11 @@ async function fetchWithRetry(url: string, options: any, retries = 2): Promise<R
     }
 
     if (!res.ok) {
+      console.error(`❌ GITHUB API ERROR: ${res.status} ${res.statusText} | URL: ${url}`);
       throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
     }
+
+    console.log(`✅ GITHUB API SUCCESS: ${res.status} | URL: ${url}`);
 
     // Success — reset rate limit flag
     rateLimited = false;
@@ -131,8 +134,10 @@ async function fetchGitHubTree(owner: string, repo: string, branch: string): Pro
   let rawFiles = data.tree
     .filter((item: any) => item.type === "blob")
     .filter((item: any) => {
-        const ext = `.${item.path.split('.').pop()}`;
-        return includedExtensions.has(ext) && !excludedPatterns.some(p => p.test(item.path));
+        const path = item.path;
+        if (path === "package.json") return true; // Explicitly include package.json
+        const ext = `.${path.split('.').pop()}`;
+        return includedExtensions.has(ext) && !excludedPatterns.some(p => p.test(path));
     });
 
   // 2. Clean Paths
@@ -283,7 +288,58 @@ export async function ingest(input: IngestionInput): Promise<IngestionOutput> {
 
   const dependencies: DependencyInput[] = [];
 
+  // --- Step A: Tech Stack Detection ---
+  let techStack: string[] = [];
+  let sysMetadata: any = { totalDeps: 0, appType: "generic" };
+
+  const pkgFile = files.find(f => f.id === "package.json");
+  if (pkgFile?.content) {
+    try {
+      const pkg = JSON.parse(pkgFile.content);
+      const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+      
+      sysMetadata.totalDeps = Object.keys(deps).length;
+      
+      const libs = {
+        "React": ["react", "react-dom"],
+        "Next.js": ["next"],
+        "Express": ["express"],
+        "Tailwind": ["tailwindcss"],
+        "Mongoose": ["mongoose"],
+        "Vite": ["vite"],
+        "FastAPI": ["fastapi"], // Placeholder if py
+        "Docker": ["docker"]
+      };
+
+      for (const [name, keys] of Object.entries(libs)) {
+        if (keys.some(k => deps[k])) techStack.push(name);
+      }
+
+      const hasBackend = deps["express"] || deps["mongoose"] || deps["pg"];
+      const hasFrontend = deps["react"] || deps["next"] || deps["vue"];
+      
+      if (hasBackend && hasFrontend) sysMetadata.appType = "Fullstack Application";
+      else if (hasFrontend) sysMetadata.appType = "Frontend-only Node";
+      else if (hasBackend) sysMetadata.appType = "Backend Service";
+
+      // Attach to package.json node
+      pkgFile.techStack = techStack;
+      pkgFile.isConfig = true;
+      pkgFile.totalDeps = sysMetadata.totalDeps;
+    } catch (e) {
+      console.warn("Failed to parse package.json");
+    }
+  }
+
+  // --- Step B: Edge Processing & Tag Propagation ---
   for (const file of files) {
+    // Propagate framework tags
+    if (techStack.includes("React") && (file.id.includes("src/") || file.id.includes("frontend/"))) {
+        file.framework = "React";
+    } else if (techStack.includes("Express") && (file.id.includes("api/") || file.id.includes("backend/"))) {
+        file.framework = "Express";
+    }
+
     if (!file.content) continue;
     const imports = extractImports(file.content, file.extension);
     let edgeCount = 0;
@@ -293,9 +349,14 @@ export async function ingest(input: IngestionInput): Promise<IngestionOutput> {
         if (resolved && resolved !== file.id) {
             dependencies.push({ from: file.id, to: resolved });
             edgeCount++;
-            if (edgeCount >= 3) break; // Strict edge limit per task
+            if (edgeCount >= 3) break; 
         }
     }
+  }
+
+  // Add SYSTEM -> package.json edge
+  if (allFileIds.includes("package.json")) {
+    dependencies.push({ from: "SYSTEM", to: "package.json" });
   }
 
   return { files, dependencies };

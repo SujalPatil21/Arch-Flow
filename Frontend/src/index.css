@@ -45,13 +45,27 @@ body {
 }
 
 .react-flow__controls button {
-  background: rgba(0,0,0,0.8) !important;
-  border-color: rgba(255,255,255,0.1) !important;
-  color: rgba(255,255,255,0.6) !important;
+  background: transparent !important;
+  color: #E5E7EB !important;
+  border: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 6px !important;
+  transition: all 0.2s ease !important;
 }
 
 .react-flow__controls button:hover {
-  background: rgba(99,102,241,0.2) !important;
+  background: rgba(99, 102, 241, 0.2) !important;
+  color: white !important;
+}
+
+.react-flow__controls button svg {
+  fill: currentColor !important;
+  width: 14px !important;
+  height: 14px !important;
 }
 
 /* ── Custom scrollbar ───────────────────────────────────────── */
