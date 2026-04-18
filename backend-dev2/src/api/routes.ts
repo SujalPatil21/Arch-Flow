@@ -13,29 +13,35 @@ const RATE_LIMIT_MS = 300;
 // POST /api/analyze
 // Returns: AnalysisResult
 // ---------------------------------------------------------------------------
-router.post("/analyze", (req: Request, res: Response) => {
+router.post("/analyze", async (req: Request, res: Response) => {
   try {
     const { repoUrl, mockId } = req.body;
+    console.log("REPO INPUT:", req.body);
 
     if (!repoUrl && !mockId) {
       return res.status(400).json({ error: "Missing required field: provide repoUrl or mockId" });
     }
 
-    const result = analyzeRepository({ repoUrl, mockId });
+    const result = await analyzeRepository({ repoUrl, mockId });
+
+    console.log("FINAL NODE COUNT:", result.metadata.totalFiles);
 
     // PRE-WARM CACHE (Background)
     preWarmCache(result).catch(() => {});
 
     return res.status(200).json(result);
-  } catch (error) {
+  } catch (error: any) {
     console.error("[/analyze] Exception:", error);
+    // Task 2: Safe Response Shape
     return res.status(200).json({
+      error: true,
+      message: error.message || "Failed to analyze repository",
       graph: { nodes: [], edges: [] },
       views: { default: [], highImpact: [], entryPoints: [], byFolder: {} },
       nodeMap: {},
       searchIndex: {},
       queryContext: { topNodes: [], entryPoints: [], nodeMap: {} },
-      metadata: { version: "1.0.0-fallback", totalFiles: 0, totalEdges: 0, validEdges: 0, isLargeGraph: false, payloadSize: 0 }
+      metadata: { version: "fallback", totalFiles: 0, totalEdges: 0, validEdges: 0, isLargeGraph: false, payloadSize: 0 }
     });
   }
 });

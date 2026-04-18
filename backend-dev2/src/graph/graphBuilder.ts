@@ -109,8 +109,16 @@ export function buildArchitectureGraph(input: {
     totalEdges: input.dependencies.length,
     validEdges: edges.length,
     isLargeGraph: nodes.length > 200,
-    payloadSize: 0 // Will be updated by API layer for final JSON size
+    payloadSize: 0 
   };
+
+  console.log("GRAPH NODE COUNT:", nodes.length);
+  console.log("GRAPH NODES SAMPLE:", nodes.slice(0, 10).map(n => n.id));
+
+  // Task 7: Sanity Check
+  if (nodes.length < 5 && input.files.length >= 5) {
+     throw new Error("Graph generation failed to preserve nodes — ingestion likely failed");
+  }
 
   // 10. Final Result Assembly
   return {

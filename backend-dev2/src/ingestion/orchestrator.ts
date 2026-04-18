@@ -7,8 +7,8 @@ import { deepFreeze } from "../utils/deepFreeze";
 /**
  * Single orchestrator for the full analysis pipeline.
  */
-export function analyzeRepository(input: IngestionInput): AnalysisResult {
-  const raw = ingest(input);
+export async function analyzeRepository(input: IngestionInput): Promise<AnalysisResult> {
+  const raw = await ingest(input);
   const { files, dependencies } = validateInput(raw.files, raw.dependencies);
   const result = buildArchitectureGraph({ files, dependencies });
 

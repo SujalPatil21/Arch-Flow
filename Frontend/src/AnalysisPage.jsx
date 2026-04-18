@@ -47,7 +47,9 @@ function AnalysisPage() {
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [messages, setMessages] = useState([])
   const [inputValue, setInputValue] = useState('')
-  const [isLoading, setIsLoading] = useState(true) // Start loading by default
+  const [isLoading, setIsLoading] = useState(true) 
+  const [error, setError] = useState(null)
+  const [showSuccess, setShowSuccess] = useState(false)
 
   // 2. Refs for Stale State Protection
   const nodesRef = useRef(nodes)
@@ -84,21 +86,30 @@ function AnalysisPage() {
   useEffect(() => {
     const triggerAnalysis = async () => {
       try {
+        setError(null);
         setIsLoading(true);
+        setShowSuccess(false);
         const result = await analyzeRepository(repoUrl);
+        
+        if (result.error) {
+          setError(result.message || "Unable to access this repository. Please check if it is public or try another link.");
+          setIsLoading(false);
+          return;
+        }
+
         setAnalysisResult(result);
         syncGraph(result);
+        
+        // Success Moment
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 2000);
+
         setMessages([
           { id: 1, role: 'assistant', text: `Analysis of ${repoUrl || 'the repository'} complete. I've mapped the core architecture. How can I help you explore it?` }
         ]);
-      } catch (error) {
-        console.error("Initial Analysis Error:", error);
-        // Fallback to mock on failure
-        setAnalysisResult(mockAnalysis);
-        syncGraph(mockAnalysis);
-        setMessages([
-          { id: 1, role: 'assistant', text: "I couldn't reach the live analysis engine. Showing a stored architectural snapshot instead." }
-        ]);
+      } catch (err) {
+        console.error("Initial Analysis Error:", err);
+        setError("Unable to access this repository. Please check if it is public or try another link.");
       } finally {
         setIsLoading(false);
       }
@@ -201,7 +212,21 @@ function AnalysisPage() {
           </div>
         </header>
 
-        <main className="flex-1 relative">
+        <main className={`flex-1 relative transition-all duration-700 ${isLoading || error ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
+          {/* Muted Info Bar */}
+          {analysisResult && !error && !isLoading && (
+            <div className="absolute top-0 left-0 right-0 z-20 flex flex-col items-center py-3 bg-black/40 backdrop-blur-md border-b border-white/5">
+              <div className="flex items-center gap-3 text-[11px] font-mono text-gray-400 uppercase tracking-widest">
+                <span>{analysisResult.metadata.totalFiles} Files</span>
+                <span className="opacity-30">•</span>
+                <span>{Object.keys(analysisResult.views.byFolder || {}).length} Folders</span>
+              </div>
+              {analysisResult.metadata.totalFiles > 1500 && (
+                <span className="text-[9px] text-gray-600 mt-1">Large repository detected — showing key files for performance</span>
+              )}
+            </div>
+          )}
+
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -222,6 +247,61 @@ function AnalysisPage() {
                </div>
           </div>
         </main>
+
+        {/* LOADING OVERLAY */}
+        {isLoading && (
+          <div className="absolute inset-0 z-[100] bg-black/40 backdrop-blur-xl flex items-center justify-center transition-opacity duration-500">
+            <div className="text-center">
+              <div className="w-12 h-12 border-2 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
+              <h3 className="text-xl font-medium tracking-tight text-white/90">Analyzing repository...</h3>
+              <p className="text-gray-500 text-sm mt-2">Mapping architectural dependencies</p>
+            </div>
+          </div>
+        )}
+
+        {/* SUCCESS BANNER */}
+        <div className={`absolute top-24 left-1/2 -translate-x-1/2 z-[110] transition-all duration-500 pointer-events-none ${showSuccess ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
+          <div className="px-6 py-3 bg-blue-600 text-white rounded-full text-xs font-bold uppercase tracking-widest shadow-2xl shadow-blue-500/40 flex items-center gap-2">
+            <Sparkles className="w-4 h-4" />
+            Architecture successfully mapped
+          </div>
+        </div>
+
+        {/* ERROR STATE */}
+        {error && !isLoading && (
+          <div className="absolute inset-0 z-[120] bg-black/80 backdrop-blur-2xl flex items-center justify-center p-8 transition-all duration-500">
+            <div className="text-center max-w-md animate-entrance">
+              <div className="w-16 h-16 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <Terminal className="w-8 h-8 text-red-500" />
+              </div>
+              <h3 className="text-2xl font-bold mb-3">Analysis Halted</h3>
+              <p className="text-gray-400 text-sm leading-relaxed mb-8">
+                {error}
+              </p>
+              <Link to="/" className="inline-flex items-center gap-2 px-8 py-3 bg-white text-black rounded-full text-sm font-bold transition-all hover:bg-gray-200 active:scale-95">
+                <ArrowLeft className="w-4 h-4" /> Try Another Repository
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* EMPTY STATE */}
+        {analysisResult && nodes.length === 0 && !error && !isLoading && (
+          <div className="absolute inset-0 z-[120] bg-black/80 backdrop-blur-2xl flex items-center justify-center p-8 transition-all duration-500">
+            <div className="text-center max-w-md animate-entrance">
+              <div className="w-16 h-16 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <Terminal className="w-8 h-8 text-gray-400" />
+              </div>
+              <h3 className="text-2xl font-bold mb-3">No Results Found</h3>
+              <p className="text-gray-400 text-sm leading-relaxed mb-8">
+                This repository does not contain analyzable source files.
+              </p>
+              <Link to="/" className="inline-flex items-center gap-2 px-8 py-3 bg-white text-black rounded-full text-sm font-bold transition-all hover:bg-gray-200 active:scale-95">
+                <ArrowLeft className="w-4 h-4" /> Try Another Repository
+              </Link>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Right Section: Chatbot Panel */}
